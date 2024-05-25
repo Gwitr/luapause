@@ -101,11 +101,16 @@ static void collect_args(int argc, char **argv)
             }
             break;
             case 'h':
-            fprintf(stderr, "%s init [-v] [-h] [-m memsize] dumpfile srcfile - initializes an interpreter instance from the source code and saves it to a dumpfile\n", program_name);
-            fprintf(stderr, "%s resume [-v] [-h] dumpfile - resumes an interpreter from an existing dump file\n", program_name);
-            fprintf(stderr, "   -v          verbose mode; prints allocator info after execution\n");
-            fprintf(stderr, "   -h          shows this help message\n");
-            fprintf(stderr, "   -m memsize  sets the size available for the interpreter in bytes (default %llu); only valid with -s\n", DEFAULT_MEMSIZE);
+            fprintf(stderr, "Usage:\n");
+            fprintf(stderr, "  %s init [-v] [-h] [-m memsize] dumpfile srcfile\n", program_name);
+            fprintf(stderr, "  %s resume [-v] [-h] dumpfile\n", program_name);
+            fprintf(stderr, "Subcommands:\n");
+            fprintf(stderr, "  init        initializes an interpreter instance from the source code and saves it to a dumpfile\n");
+            fprintf(stderr, "  resume      resumes an interpreter from an existing dump file\n");
+            fprintf(stderr, "Options:\n");
+            fprintf(stderr, "  -h          shows this help message\n");
+            fprintf(stderr, "  -v          verbose mode; prints allocator info after execution\n");
+            fprintf(stderr, "  -m memsize  sets the size available for the interpreter in bytes (default %llu); only valid with -s\n", DEFAULT_MEMSIZE);
             fprintf(stderr, "Note: `%s resume' signals the end of the source file execution by exiting with code 100\n", program_name);
             exit(0);
             case '?':
@@ -113,7 +118,7 @@ static void collect_args(int argc, char **argv)
         }
     }
     if (argv[optind] == NULL) {
-        fprintf(stderr, "%s: no mode specified\n", program_name);
+        fprintf(stderr, "%s: no subcommand specified\n", program_name);
         exit(1);
     }
     if (strcmp(argv[optind], "init") == 0) {
@@ -121,7 +126,7 @@ static void collect_args(int argc, char **argv)
     } else if (strcmp(argv[optind], "resume") == 0) {
         mode = RESUME;
     } else {
-        fprintf(stderr, "%s: unknown mode %s\n", program_name, argv[optind]);
+        fprintf(stderr, "%s: unknown subcommand %s\n", program_name, argv[optind]);
         exit(1);
     }
     if (argv[optind+1] == NULL) {
