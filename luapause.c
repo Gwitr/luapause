@@ -28,6 +28,8 @@ static lua_State *load_lua_state(const char *path);
 static lua_State *new_lua_state(const char *srcpath);
 static int dump_lua_state(const char *path, lua_State *state);
 
+// int getopt(argc, argv, const char *optstring);
+
 int main(int argc, char **argv)
 {
     lua_State *state = NULL;
@@ -79,69 +81,71 @@ static void fprint_stack_string(FILE *file, lua_State *state, int level, const c
 
 static void collect_args(int argc, char **argv)
 {
-    char *err;
-    int allow_flags = 1;
-    for (int argn = 1; argn < argc; ++argn) {
-        if (allow_flags && argv[argn][0] == '-') {
-            if (strcmp(argv[argn], "-v") == 0) {
-                verbose = 1;
-                continue;
-            } else if (strcmp(argv[argn], "--") == 0) {
-                allow_flags = 0;
-                continue;
-            } else if (strcmp(argv[argn], "-m") == 0) {
-                if (++argn == argc) { err = "need memory size after -m"; goto err; }
-                char *end = argv[argn];
-                memsize = strtol(argv[argn], &end, 10);
-                if (end == argv[argn]) { err = "invalid integer after -m"; goto err; }
-                if (memsize <= (int)sizeof(struct alloc_list)) { err = "memsize too small"; goto err; }
-                continue;
-            } else if (strcmp(argv[argn], "-h") == 0) {
-                fprintf(stderr, "%s init [-v] [-h] [-m memsize] dumpfile srcfile - initializes an interpreter instance from the source code and saves it to a dumpfile\n", argv[0]);
-                fprintf(stderr, "%s resume [-v] [-h] dumpfile - resumes an interpreter from an existing dump file\n", argv[0]);
-                fprintf(stderr, "   -v          verbose mode; prints allocator info after execution\n");
-                fprintf(stderr, "   -h          shows this help message\n");
-                fprintf(stderr, "   -m memsize  sets the size available for the interpreter in bytes (default %llu); only valid with -s\n", DEFAULT_MEMSIZE);
-                fprintf(stderr, "Note: `%s resume' signals the end of the source file execution by exiting with code 100\n", argv[0]);
-                exit(0);
-            } else {
-                const char *fmt = "unknown option -%c";
-                err = malloc(strlen(fmt)+1);
-                if (!err) abort();
-                sprintf(err, fmt, argv[argn][1]);
-                goto err;
+    const char *const program_name = argv[0];
+    int c;
+    while ((c = getopt(argc, argv, "hvm:")) != -1) {
+        char *strtol_end;
+        switch (c) {
+            case 'v':
+            verbose = 1;
+            break;
+            case 'm':
+            memsize = strtol(optarg, &strtol_end, 10);
+            if (strtol_end == optarg) {
+                fprintf(stderr, "%s: -m requires integer\n", program_name);
+                exit(1);
             }
-        }
-        if (mode == UNKNOWN) {
-            if (strcmp(argv[argn], "init") == 0) {
-                mode = START;
-            } else if (strcmp(argv[argn], "resume") == 0) {
-                mode = RESUME;
-            } else {
-                err = "unknown subcommand"; goto err;
+            if (memsize < 1024LL*24) {
+                fprintf(stderr, "%s: memsize too small\n", program_name);
+                exit(1);
             }
-        } else if (!dump_path) {
-            dump_path = argv[argn];
-        } else if (!src_path) {
-            src_path = argv[argn];
-        } else {
-            err = "too many positional arguments";
-            goto err;
+            break;
+            case 'h':
+            fprintf(stderr, "%s init [-v] [-h] [-m memsize] dumpfile srcfile - initializes an interpreter instance from the source code and saves it to a dumpfile\n", program_name);
+            fprintf(stderr, "%s resume [-v] [-h] dumpfile - resumes an interpreter from an existing dump file\n", program_name);
+            fprintf(stderr, "   -v          verbose mode; prints allocator info after execution\n");
+            fprintf(stderr, "   -h          shows this help message\n");
+            fprintf(stderr, "   -m memsize  sets the size available for the interpreter in bytes (default %llu); only valid with -s\n", DEFAULT_MEMSIZE);
+            fprintf(stderr, "Note: `%s resume' signals the end of the source file execution by exiting with code 100\n", program_name);
+            exit(0);
+            case '?':
+            exit(1);
         }
     }
-
-    if (mode == UNKNOWN) { err = "no mode specified"; goto err; }
-    if (!dump_path) { err = "no memory dump file specified"; goto err; }
-    if (memsize != 0 && mode != START) { err = "-m only valid with init subcommand"; goto err; }
-    if (mode == START && !src_path) { err = "no source code file specified"; goto err; }
-    if (mode == RESUME && src_path) { err = "can't use source file with resume subcommand"; goto err; }
-    if (memsize == 0) memsize = DEFAULT_MEMSIZE;
-    return;
-
-    err:
-    fprintf(stderr, "%s: %s\n", argv[0], err);
-    fprintf(stderr, "see `%s -h' for usage\n", argv[0]);
-    exit(1);
+    if (argv[optind] == NULL) {
+        fprintf(stderr, "%s: no mode specified\n", program_name);
+        exit(1);
+    }
+    if (strcmp(argv[optind], "init") == 0) {
+        mode = START;
+    } else if (strcmp(argv[optind], "resume") == 0) {
+        mode = RESUME;
+    } else {
+        fprintf(stderr, "%s: unknown mode %s\n", program_name, argv[optind]);
+        exit(1);
+    }
+    if (argv[optind+1] == NULL) {
+        fprintf(stderr, "%s: no dumpfile specified\n", program_name);
+        exit(1);
+    }
+    dump_path = argv[optind+1];
+    if (mode == START && argv[optind+2] == NULL) {
+        fprintf(stderr, "%s: no srcfile specified\n", program_name);
+        exit(1);
+    }
+    if ((mode == RESUME && argv[optind+2] != NULL) || (mode == START && argv[optind+3] != NULL)) {
+        fprintf(stderr, "%s: trailing parameters\n", program_name);
+        exit(1);
+    }
+    if (mode == START) {
+        src_path = argv[optind+2];
+        if (memsize == 0) memsize = DEFAULT_MEMSIZE;
+    } else {
+        if (memsize != 0) {
+            fprintf(stderr, "%s: -m only valid for init mode\n", program_name);
+            exit(1);
+        }
+    }
 }
 
 static void disable_aslr(char **argv)
